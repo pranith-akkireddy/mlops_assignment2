@@ -1,0 +1,19 @@
+version: "3.8"
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: digits-baseline-api:latest
+    container_name: digits-api
+    ports:
+      - "8000:8000"
+    environment:
+      MODEL_PATH: /app/models/baseline_model.pkl
+      SCALER_PATH: /app/data/processed/scaler.pkl
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 3

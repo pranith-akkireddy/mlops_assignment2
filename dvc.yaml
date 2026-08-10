@@ -1,0 +1,18 @@
+stages:
+  fetch:
+    cmd: python scripts/fetch_data.py
+    outs:
+      - data/raw/digits_raw.npz
+      - data/processed/digits_processed.npz
+      - data/processed/scaler.pkl
+  train:
+    cmd: python src/train.py --seed 42 --C 1.0 --max-iter 1000
+    deps:
+      - data/processed/digits_processed.npz
+      - src/train.py
+      - src/preprocess.py
+      - src/model_utils.py
+    outs:
+      - models/baseline_model.pkl
+      - artifacts/confusion_matrix.png
+      - artifacts/accuracy_curve.png

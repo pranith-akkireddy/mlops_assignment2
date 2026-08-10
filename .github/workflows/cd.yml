@@ -1,0 +1,32 @@
+name: CD - Deploy & Smoke Test
+
+on:
+  workflow_run:
+    workflows: ["CI - Test, Train & Build Image"]
+    types: [completed]
+    branches: [main]
+
+jobs:
+  deploy:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Pull and run via Docker Compose
+        env:
+          IMAGE_TAG: latest
+        run: |
+          docker pull ${{ secrets.DOCKER_USERNAME }}/digits-baseline-api:latest
+          docker compose -f docker-compose.yml up -d
+
+      - name: Wait for service
+        run: sleep 10
+
+      - name: Run smoke tests
+        run: python scripts/smoke_test.py
+
+      - name: Tear down service
+        if: always()
+        run: docker compose -f docker-compose.yml down
