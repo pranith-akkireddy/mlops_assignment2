@@ -9,11 +9,17 @@ on:
 
 env:
   IMAGE_NAME: cats-dogs-api
+  REGISTRY: ghcr.io
   MAX_PER_CLASS: "1000"
 
 jobs:
   test-and-build:
     runs-on: ubuntu-latest
+    # packages:write lets the automatic GITHUB_TOKEN push to GHCR, so no
+    # registry secrets need to be configured on the repository.
+    permissions:
+      contents: read
+      packages: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -72,18 +78,22 @@ jobs:
           python scripts/smoke_test.py
           podman rm -f ci-verify
 
-      # --password-stdin keeps the token out of the process list and the log.
-      - name: Log in to Docker Hub
+      # GITHUB_TOKEN is injected automatically; --password-stdin keeps it out
+      # of the process list and the log.
+      - name: Log in to GitHub Container Registry
         if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
         run: |
-          echo "${{ secrets.DOCKER_PASSWORD }}" \
-            | podman login docker.io -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
+          echo "${{ secrets.GITHUB_TOKEN }}" \
+            | podman login ${{ env.REGISTRY }} -u "${{ github.actor }}" --password-stdin
 
       - name: Push image to registry
         if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
         run: |
-          REPO=docker.io/${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}
+          # GHCR rejects uppercase in image paths, so normalise the owner.
+          OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          REPO=${{ env.REGISTRY }}/$OWNER/${{ env.IMAGE_NAME }}
           podman tag ${{ env.IMAGE_NAME }}:${{ github.sha }} $REPO:${{ github.sha }}
           podman tag ${{ env.IMAGE_NAME }}:${{ github.sha }} $REPO:latest
           podman push $REPO:${{ github.sha }}
           podman push $REPO:latest
+          echo "Pushed $REPO:${{ github.sha }} and :latest"

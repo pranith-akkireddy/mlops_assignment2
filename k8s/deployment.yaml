@@ -16,9 +16,10 @@ spec:
     spec:
       containers:
         - name: api
-          # Registry-qualified so a real cluster can pull it. Replace
-          # DOCKER_USERNAME with your Docker Hub account (or use kustomize).
-          image: docker.io/DOCKER_USERNAME/cats-dogs-api:latest
+          # Published by CI to GitHub Container Registry. While the GHCR
+          # package is private the cluster needs an imagePullSecret; make the
+          # package public to pull it anonymously.
+          image: ghcr.io/pranith-akkireddy/cats-dogs-api:latest
           imagePullPolicy: Always
           ports:
             - containerPort: 8000

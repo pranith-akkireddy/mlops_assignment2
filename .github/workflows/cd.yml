@@ -9,11 +9,17 @@ on:
 
 env:
   IMAGE_NAME: cats-dogs-api
+  REGISTRY: ghcr.io
 
 jobs:
   deploy:
     if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
+    # packages:read lets the automatic GITHUB_TOKEN pull the image CI pushed,
+    # even while the GHCR package is still private.
+    permissions:
+      contents: read
+      packages: read
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -26,20 +32,25 @@ jobs:
       - name: Install smoke test and deploy dependencies
         run: pip install pillow==10.4.0 podman-compose==1.6.0
 
-      # --password-stdin keeps the token out of the process list and the log.
-      - name: Log in to Docker Hub
+      # GITHUB_TOKEN is injected automatically; --password-stdin keeps it out
+      # of the process list and the log.
+      - name: Log in to GitHub Container Registry
         run: |
-          echo "${{ secrets.DOCKER_PASSWORD }}" \
-            | podman login docker.io -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
+          echo "${{ secrets.GITHUB_TOKEN }}" \
+            | podman login ${{ env.REGISTRY }} -u "${{ github.actor }}" --password-stdin
+
+      # GHCR rejects uppercase in image paths, so normalise the owner.
+      - name: Resolve image reference
+        run: |
+          OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          echo "IMAGE=${{ env.REGISTRY }}/$OWNER/${{ env.IMAGE_NAME }}:latest" >> $GITHUB_ENV
 
       - name: Pull image from registry
-        run: podman pull docker.io/${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:latest
+        run: podman pull "$IMAGE"
 
       # --no-build guarantees the pulled registry image is deployed rather than
-      # a locally rebuilt one.
+      # a locally rebuilt one. IMAGE is read from the environment above.
       - name: Deploy via podman-compose
-        env:
-          IMAGE: docker.io/${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:latest
         run: podman-compose -f docker-compose.yml up -d --no-build
 
       - name: Wait for service to become healthy

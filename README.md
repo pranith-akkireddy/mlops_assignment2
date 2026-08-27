@@ -140,7 +140,7 @@ Compose — Podman has no built-in Compose engine, so this uses
 pip install podman-compose==1.6.0
 
 podman-compose up --build -d                              # local build
-IMAGE=docker.io/<user>/cats-dogs-api:latest \
+IMAGE=ghcr.io/<owner>/cats-dogs-api:latest \
   podman-compose up -d --no-build                         # registry image
 
 podman-compose logs
@@ -152,7 +152,7 @@ podman-compose down
 **CI** (`.github/workflows/ci.yml`) — on every push/PR: checkout, install deps,
 fetch data (archive cached via `actions/cache`), train, run pytest, `podman
 build` the image, start it and assert it serves a real prediction, then
-`podman push` to Docker Hub on `main`/`master`.
+`podman push` to GHCR on `main`/`master`.
 
 **CD** (`.github/workflows/cd.yml`) — after a successful CI run: `podman login`,
 `podman pull` the new image, deploy with `podman-compose up -d --no-build` (so
@@ -160,22 +160,48 @@ the *pulled* image is deployed, not a local rebuild), wait for health, run
 smoke tests, and fail the pipeline if they fail.
 
 Podman ships preinstalled on GitHub's `ubuntu-latest` runners, so no setup
-action is needed; `podman-compose` is pip-installed in the CD job. Registry
-credentials are piped via `--password-stdin` so the token never appears in the
-process list or the run log.
+action is needed; `podman-compose` is pip-installed in the CD job.
 
-Required repository secrets: `DOCKER_USERNAME`, `DOCKER_PASSWORD`.
+**No repository secrets are required.** The image is published to GitHub
+Container Registry, and both jobs authenticate with the `GITHUB_TOKEN` that
+Actions injects automatically — CI requests `packages: write`, CD requests
+`packages: read`. The token is piped via `--password-stdin` so it never
+appears in the process list or the run log.
+
+The published image is `ghcr.io/<owner>/cats-dogs-api`. New GHCR packages are
+**private** by default; to let anyone (or a Kubernetes cluster without an
+`imagePullSecret`) pull it, set the package to public under
+*Profile → Packages → cats-dogs-api → Package settings*.
+
+Pushing to GHCR from a workstation needs a GitHub PAT with the `write:packages`
+scope:
+
+```bash
+echo $GITHUB_PAT | podman login ghcr.io -u <your-github-username> --password-stdin
+```
 
 ## Kubernetes
 
 ```bash
-sed -i 's/DOCKER_USERNAME/<your-user>/' k8s/deployment.yaml
 kubectl apply -f k8s/deployment.yaml -f k8s/service.yaml
 kubectl get pods -l app=cats-dogs-api
 ```
 
 Two replicas, liveness/readiness probes on `/health`, and resource
 requests/limits. Reachable on NodePort `30080`.
+
+The manifest references `ghcr.io/pranith-akkireddy/cats-dogs-api:latest`. If
+the GHCR package is still private, the cluster cannot pull it anonymously —
+either make the package public or create a pull secret:
+
+```bash
+kubectl create secret docker-registry ghcr-creds \
+  --docker-server=ghcr.io \
+  --docker-username=<your-github-username> \
+  --docker-password=$GITHUB_PAT
+```
+
+then add `imagePullSecrets: [{name: ghcr-creds}]` to the pod spec.
 
 ## Monitoring
 
