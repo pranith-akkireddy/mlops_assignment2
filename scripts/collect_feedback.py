@@ -48,8 +48,23 @@ def _post_image(path):
         return json.loads(resp.read())
 
 
+def load_holdout():
+    """Return the held-out test split recorded at preprocessing time.
+
+    Scoring against images the model trained on would report leaked accuracy,
+    so only the test split is ever used here.
+    """
+    data = preprocess.load_processed_data()
+    if "test_paths" not in data:
+        raise SystemExit(
+            "Processed data predates held-out path tracking. "
+            "Re-run scripts/fetch_data.py to regenerate it."
+        )
+    return data["test_paths"].astype(str), data["y_test"]
+
+
 def main(n=50, seed=7):
-    paths, labels = preprocess.discover_images(max_per_class=None, seed=seed)
+    paths, labels = load_holdout()
     rng = np.random.default_rng(seed)
     idx = rng.choice(len(paths), size=min(n, len(paths)), replace=False)
 
@@ -77,6 +92,7 @@ def main(n=50, seed=7):
         if (true_arr == i).any()
     }
     report = {
+        "split": "test (held-out)",
         "samples": len(true_labels),
         "failed_requests": failures,
         "accuracy": round(accuracy, 4),

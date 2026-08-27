@@ -174,6 +174,9 @@ def preprocess_data(
             X_train=X_train, y_train=y_train,
             X_val=X_val, y_val=va_y,
             X_test=X_test, y_test=te_y,
+            # Kept so post-deployment monitoring can score the *held-out*
+            # split rather than images the model was trained on.
+            test_paths=np.asarray(te_p, dtype=np.str_),
         )
     return {
         "X_train": X_train, "y_train": y_train,

@@ -1,0 +1,63 @@
+schema: '2.0'
+stages:
+  fetch:
+    cmd: python scripts/fetch_data.py --max-per-class 3000 --augment-copies 1 
+      --seed 42
+    deps:
+    - path: scripts/fetch_data.py
+      hash: md5
+      md5: dfd0f3b838bfcfa189a79a26fc253306
+      size: 4558
+    - path: src/preprocess.py
+      hash: md5
+      md5: d7254d9f06c0275a07534d9dff5aac62
+      size: 7432
+    outs:
+    - path: data/processed/cats_dogs_processed.npz
+      hash: md5
+      md5: e2543fba63a8c1815e43b823e1b6a314
+      size: 4761553
+    - path: data/processed/scaler.pkl
+      hash: md5
+      md5: 9ea8febfaaa73cafd48687e3cf74156b
+      size: 74343
+  train:
+    cmd: python src/train.py --seed 42 --C 1.0 --max-iter 1000
+    deps:
+    - path: data/processed/cats_dogs_processed.npz
+      hash: md5
+      md5: e2543fba63a8c1815e43b823e1b6a314
+      size: 4761553
+    - path: src/model_utils.py
+      hash: md5
+      md5: 89ed86fdc3fd032f069cd0b3621bc313
+      size: 3780
+    - path: src/preprocess.py
+      hash: md5
+      md5: d7254d9f06c0275a07534d9dff5aac62
+      size: 7432
+    - path: src/train.py
+      hash: md5
+      md5: 57e2983c7f47230bdcd4f5ab2182262f
+      size: 4241
+    outs:
+    - path: artifacts/accuracy_curve.png
+      hash: md5
+      md5: 08c0db25c47b51fc89d09946a68682de
+      size: 20642
+    - path: artifacts/confusion_matrix.png
+      hash: md5
+      md5: 32e87a1e9695142e6786906e5701b278
+      size: 17479
+    - path: artifacts/log_loss_curve.png
+      hash: md5
+      md5: 48b081ac3fa4aad386d75e546aea308f
+      size: 37967
+    - path: artifacts/roc_curve.png
+      hash: md5
+      md5: cc3ebc94e4b191aa5d92cb2685dd12e5
+      size: 29842
+    - path: models/cats_dogs_model.pkl
+      hash: md5
+      md5: 6329c0d82225c2f2ec63249a57894f00
+      size: 25455

@@ -74,6 +74,15 @@ dvc repro          # runs fetch -> train, tracking outputs
 dvc push           # publish artifacts to the configured remote
 ```
 
+On Windows, if the checkout sits in a deeply nested directory (e.g. under
+OneDrive), DVC's cache paths can exceed the 260-character `MAX_PATH` limit and
+`dvc repro` fails writing to `.dvc/cache`. Point the cache somewhere short —
+`--local` keeps this out of version control:
+
+```bash
+dvc cache dir --local C:/dvc_cache
+```
+
 ## API
 
 | Endpoint | Method | Description |
