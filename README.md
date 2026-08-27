@@ -105,13 +105,20 @@ Interactive docs (handy for the demo recording): <http://localhost:8000/docs>
 
 ## Container
 
+The container runtime is **Podman** (daemonless and rootless). The build file
+is still named `Dockerfile`, which Podman reads natively.
+
 ```bash
-docker build -t cats-dogs-api:latest .
-docker run -p 8000:8000 cats-dogs-api:latest
+podman build --format docker -t cats-dogs-api:latest .
+podman run -p 8000:8000 cats-dogs-api:latest
 python scripts/smoke_test.py
 ```
 
-Podman works identically (`podman build` / `podman run`).
+`--format docker` matters: Podman defaults to the OCI image format, which has
+no `HEALTHCHECK` field and silently drops the one declared in the `Dockerfile`.
+
+Docker is a drop-in substitute if you prefer it — the same `Dockerfile` and
+`docker-compose.yml` work with `docker build` / `docker run`.
 
 Behind a TLS-inspecting corporate proxy, pip may fail to verify PyPI's
 certificate. Certificate verification is **on** by default; opt out only for a
@@ -126,24 +133,36 @@ podman build --build-arg \
 The cleaner fix is to install your corporate root CA into the image and set
 `PIP_CERT`.
 
-Compose:
+Compose — Podman has no built-in Compose engine, so this uses
+[`podman-compose`](https://github.com/containers/podman-compose):
 
 ```bash
-docker compose up --build -d                              # local build
-IMAGE=<user>/cats-dogs-api:latest docker compose up -d --no-build   # registry image
+pip install podman-compose==1.6.0
+
+podman-compose up --build -d                              # local build
+IMAGE=docker.io/<user>/cats-dogs-api:latest \
+  podman-compose up -d --no-build                         # registry image
+
+podman-compose logs
+podman-compose down
 ```
 
 ## CI/CD
 
 **CI** (`.github/workflows/ci.yml`) — on every push/PR: checkout, install deps,
-fetch data (archive cached via `actions/cache`), train, run pytest, build the
-image, start it and assert it serves a real prediction, then push to Docker Hub
-on `main`.
+fetch data (archive cached via `actions/cache`), train, run pytest, `podman
+build` the image, start it and assert it serves a real prediction, then
+`podman push` to Docker Hub on `main`/`master`.
 
-**CD** (`.github/workflows/cd.yml`) — after a successful `main` CI run: log in,
-`docker pull` the new image, deploy with `docker compose up -d --no-build` (so
+**CD** (`.github/workflows/cd.yml`) — after a successful CI run: `podman login`,
+`podman pull` the new image, deploy with `podman-compose up -d --no-build` (so
 the *pulled* image is deployed, not a local rebuild), wait for health, run
 smoke tests, and fail the pipeline if they fail.
+
+Podman ships preinstalled on GitHub's `ubuntu-latest` runners, so no setup
+action is needed; `podman-compose` is pip-installed in the CD job. Registry
+credentials are piped via `--password-stdin` so the token never appears in the
+process list or the run log.
 
 Required repository secrets: `DOCKER_USERNAME`, `DOCKER_PASSWORD`.
 

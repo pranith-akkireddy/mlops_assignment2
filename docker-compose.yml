@@ -1,5 +1,9 @@
-# Local development:  docker compose up --build -d
-# CD (registry image): IMAGE=<user>/cats-dogs-api:latest docker compose up -d --no-build
+# Deployed with podman-compose (Podman has no built-in Compose engine):
+#   pip install podman-compose
+# Local development:   podman-compose up --build -d
+# CD (registry image): IMAGE=docker.io/<user>/cats-dogs-api:latest \
+#                        podman-compose up -d --no-build
+# Also compatible with `docker compose` if you prefer Docker.
 services:
   api:
     image: ${IMAGE:-cats-dogs-api:latest}

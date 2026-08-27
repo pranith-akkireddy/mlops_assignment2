@@ -23,24 +23,24 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install smoke test dependencies
-        run: pip install pillow==10.4.0
+      - name: Install smoke test and deploy dependencies
+        run: pip install pillow==10.4.0 podman-compose==1.6.0
 
+      # --password-stdin keeps the token out of the process list and the log.
       - name: Log in to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
+        run: |
+          echo "${{ secrets.DOCKER_PASSWORD }}" \
+            | podman login docker.io -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
 
       - name: Pull image from registry
-        run: docker pull ${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:latest
+        run: podman pull docker.io/${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:latest
 
       # --no-build guarantees the pulled registry image is deployed rather than
       # a locally rebuilt one.
-      - name: Deploy via Docker Compose
+      - name: Deploy via podman-compose
         env:
-          IMAGE: ${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:latest
-        run: docker compose -f docker-compose.yml up -d --no-build
+          IMAGE: docker.io/${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:latest
+        run: podman-compose -f docker-compose.yml up -d --no-build
 
       - name: Wait for service to become healthy
         run: |
@@ -52,7 +52,7 @@ jobs:
             sleep 2
           done
           echo "Service failed to become healthy in time."
-          docker compose logs
+          podman-compose logs
           exit 1
 
       - name: Run smoke tests
@@ -60,8 +60,8 @@ jobs:
 
       - name: Show service logs
         if: always()
-        run: docker compose logs --no-color
+        run: podman-compose logs
 
       - name: Tear down service
         if: always()
-        run: docker compose -f docker-compose.yml down
+        run: podman-compose -f docker-compose.yml down
