@@ -1,13 +1,12 @@
+import logging
 import os
 import sys
 import time
-import logging
 from contextlib import asynccontextmanager
-from typing import List
+from typing import Dict
 
-import numpy as np
-from fastapi import FastAPI, Request, HTTPException
-from pydantic import BaseModel, Field
+from fastapi import FastAPI, File, HTTPException, Request, UploadFile
+from pydantic import BaseModel
 
 # Make src imports available without package install
 _SRC = os.path.join(os.path.dirname(os.path.dirname(__file__)), "src")
@@ -15,27 +14,28 @@ if _SRC not in sys.path:
     sys.path.insert(0, _SRC)
 
 from model_utils import load_model  # noqa: E402
-from preprocess import load_scaler  # noqa: E402
+from preprocess import (  # noqa: E402
+    CLASS_NAMES,
+    image_to_features,
+    load_image,
+    load_scaler,
+)
 
-_DEFAULT_MODEL_PATH = os.path.join(
-    os.path.dirname(os.path.dirname(__file__)), "models", "baseline_model.pkl"
-)
-_DEFAULT_SCALER_PATH = os.path.join(
-    os.path.dirname(os.path.dirname(__file__)), "data", "processed", "scaler.pkl"
-)
+_ROOT = os.path.dirname(os.path.dirname(__file__))
+_DEFAULT_MODEL_PATH = os.path.join(_ROOT, "models", "cats_dogs_model.pkl")
+_DEFAULT_SCALER_PATH = os.path.join(_ROOT, "data", "processed", "scaler.pkl")
+
+MAX_UPLOAD_BYTES = int(os.environ.get("MAX_UPLOAD_BYTES", str(10 * 1024 * 1024)))
 
 logger = logging.getLogger("uvicorn")
 request_count = 0
 total_latency = 0.0
 
 
-class PredictRequest(BaseModel):
-    features: List[float] = Field(..., min_length=64, max_length=64)
-
-
 class PredictResponse(BaseModel):
-    label: int
-    probabilities: dict
+    label: str
+    label_index: int
+    probabilities: Dict[str, float]
 
 
 @asynccontextmanager
@@ -48,8 +48,9 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Digits Baseline Inference API",
-    version="0.1.0",
+    title="Cats vs Dogs Inference API",
+    description="Binary image classification service for a pet adoption platform.",
+    version="1.0.0",
     lifespan=lifespan,
 )
 
@@ -62,6 +63,7 @@ async def metrics_middleware(request: Request, call_next):
     latency = time.perf_counter() - start
     request_count += 1
     total_latency += latency
+    # Only request metadata is logged -- never the uploaded image payload.
     logger.info(
         "method=%s path=%s status_code=%s latency_ms=%.2f total_requests=%s",
         request.method,
@@ -75,20 +77,42 @@ async def metrics_middleware(request: Request, call_next):
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "model_loaded": hasattr(app.state, "model")}
+    return {
+        "status": "ok",
+        "model_loaded": hasattr(app.state, "model"),
+        "classes": list(CLASS_NAMES),
+    }
 
 
 @app.post("/predict", response_model=PredictResponse)
-async def predict(req: PredictRequest):
+async def predict(file: UploadFile = File(...)):
+    payload = await file.read()
+    if not payload:
+        raise HTTPException(status_code=400, detail="Uploaded file is empty")
+    if len(payload) > MAX_UPLOAD_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Image exceeds {MAX_UPLOAD_BYTES} bytes",
+        )
     try:
-        arr = np.asarray(req.features).reshape(1, -1)
-        scaled = app.state.scaler.transform(arr)
+        img = load_image(payload)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=400, detail=f"Could not decode image: {exc}"
+        ) from exc
+
+    try:
+        features = image_to_features(img).reshape(1, -1)
+        scaled = app.state.scaler.transform(features)
         model = app.state.model
         probs = model.predict_proba(scaled)[0]
-        label = int(model.predict(scaled)[0])
+        index = int(model.predict(scaled)[0])
         return {
-            "label": label,
-            "probabilities": {str(i): float(p) for i, p in enumerate(probs)},
+            "label": CLASS_NAMES[index],
+            "label_index": index,
+            "probabilities": {
+                name: float(p) for name, p in zip(CLASS_NAMES, probs)
+            },
         }
     except Exception as exc:
         logger.exception("Prediction failed")

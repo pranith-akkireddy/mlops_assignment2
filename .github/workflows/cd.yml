@@ -5,27 +5,62 @@ on:
     workflows: ["CI - Test, Train & Build Image"]
     types: [completed]
     branches: [main]
+  workflow_dispatch:
+
+env:
+  IMAGE_NAME: cats-dogs-api
 
 jobs:
   deploy:
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Pull and run via Docker Compose
-        env:
-          IMAGE_TAG: latest
-        run: |
-          docker pull ${{ secrets.DOCKER_USERNAME }}/digits-baseline-api:latest
-          docker compose -f docker-compose.yml up -d
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
 
-      - name: Wait for service
-        run: sleep 10
+      - name: Install smoke test dependencies
+        run: pip install pillow==10.4.0
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Pull image from registry
+        run: docker pull ${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:latest
+
+      # --no-build guarantees the pulled registry image is deployed rather than
+      # a locally rebuilt one.
+      - name: Deploy via Docker Compose
+        env:
+          IMAGE: ${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:latest
+        run: docker compose -f docker-compose.yml up -d --no-build
+
+      - name: Wait for service to become healthy
+        run: |
+          for i in $(seq 1 30); do
+            if curl -fs http://localhost:8000/health > /dev/null; then
+              echo "Service is up."
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Service failed to become healthy in time."
+          docker compose logs
+          exit 1
 
       - name: Run smoke tests
         run: python scripts/smoke_test.py
+
+      - name: Show service logs
+        if: always()
+        run: docker compose logs --no-color
 
       - name: Tear down service
         if: always()

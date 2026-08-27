@@ -3,8 +3,19 @@ __pycache__/
 .venv/
 venv/
 .git/
+.github/
+.dvc/
 mlruns/
-data/raw/
 artifacts/
+tests/
+scripts/
 .vscode/
 .idea/
+*.pdf
+
+# Keep the build context small: only the two artifacts the image needs.
+data/raw/
+data/processed/*
+!data/processed/scaler.pkl
+models/*
+!models/cats_dogs_model.pkl

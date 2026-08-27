@@ -1,19 +1,25 @@
-version: "3.8"
-
+# Local development:  docker compose up --build -d
+# CD (registry image): IMAGE=<user>/cats-dogs-api:latest docker compose up -d --no-build
 services:
   api:
+    image: ${IMAGE:-cats-dogs-api:latest}
     build:
       context: .
       dockerfile: Dockerfile
-    image: digits-baseline-api:latest
-    container_name: digits-api
+    container_name: cats-dogs-api
     ports:
       - "8000:8000"
     environment:
-      MODEL_PATH: /app/models/baseline_model.pkl
+      MODEL_PATH: /app/models/cats_dogs_model.pkl
       SCALER_PATH: /app/data/processed/scaler.pkl
+    restart: unless-stopped
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen('http://localhost:8000/health')
       interval: 10s
       timeout: 5s
-      retries: 3
+      retries: 5
+      start_period: 10s

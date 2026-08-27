@@ -1,45 +1,48 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: digits-api
+  name: cats-dogs-api
   labels:
-    app: digits-api
+    app: cats-dogs-api
 spec:
   replicas: 2
   selector:
     matchLabels:
-      app: digits-api
+      app: cats-dogs-api
   template:
     metadata:
       labels:
-        app: digits-api
+        app: cats-dogs-api
     spec:
       containers:
         - name: api
-          image: digits-baseline-api:latest
+          # Registry-qualified so a real cluster can pull it. Replace
+          # DOCKER_USERNAME with your Docker Hub account (or use kustomize).
+          image: docker.io/DOCKER_USERNAME/cats-dogs-api:latest
+          imagePullPolicy: Always
           ports:
             - containerPort: 8000
           env:
             - name: MODEL_PATH
-              value: /app/models/baseline_model.pkl
+              value: /app/models/cats_dogs_model.pkl
             - name: SCALER_PATH
               value: /app/data/processed/scaler.pkl
           livenessProbe:
             httpGet:
               path: /health
               port: 8000
-            initialDelaySeconds: 5
+            initialDelaySeconds: 10
             periodSeconds: 10
           readinessProbe:
             httpGet:
               path: /health
               port: 8000
-            initialDelaySeconds: 2
+            initialDelaySeconds: 5
             periodSeconds: 5
           resources:
             requests:
-              memory: "256Mi"
+              memory: "512Mi"
               cpu: "250m"
             limits:
-              memory: "512Mi"
-              cpu: "500m"
+              memory: "1Gi"
+              cpu: "1000m"

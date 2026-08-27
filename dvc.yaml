@@ -1,18 +1,23 @@
 stages:
   fetch:
-    cmd: python scripts/fetch_data.py
+    cmd: python scripts/fetch_data.py --max-per-class 3000 --augment-copies 1 --seed 42
+    deps:
+      - scripts/fetch_data.py
+      - src/preprocess.py
     outs:
-      - data/raw/digits_raw.npz
-      - data/processed/digits_processed.npz
+      - data/processed/cats_dogs_processed.npz
       - data/processed/scaler.pkl
   train:
     cmd: python src/train.py --seed 42 --C 1.0 --max-iter 1000
     deps:
-      - data/processed/digits_processed.npz
+      - data/processed/cats_dogs_processed.npz
       - src/train.py
-      - src/preprocess.py
       - src/model_utils.py
+      - src/preprocess.py
     outs:
-      - models/baseline_model.pkl
+      - models/cats_dogs_model.pkl
+    plots:
       - artifacts/confusion_matrix.png
+      - artifacts/log_loss_curve.png
       - artifacts/accuracy_curve.png
+      - artifacts/roc_curve.png

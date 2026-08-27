@@ -23,6 +23,9 @@ artifacts/*
 # MLflow
 mlruns/
 
+# Post-deployment monitoring output
+feedback_report.json
+
 # IDE
 .vscode/
 .idea/
