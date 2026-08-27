@@ -68,15 +68,42 @@ jobs:
       - name: Build container image
         run: podman build --format docker -t ${{ env.IMAGE_NAME }}:${{ github.sha }} .
 
+      # SMOKE_BASE_URL is pinned to 127.0.0.1 rather than localhost: podman
+      # publishes on IPv4 only, while localhost can resolve to ::1 first.
       - name: Verify image serves predictions
+        env:
+          SMOKE_BASE_URL: http://127.0.0.1:8000
         run: |
-          podman run -d --name ci-verify -p 8000:8000 ${{ env.IMAGE_NAME }}:${{ github.sha }}
+          set -uo pipefail
+          podman run -d --name ci-verify -p 127.0.0.1:8000:8000 \
+            ${{ env.IMAGE_NAME }}:${{ github.sha }}
+
+          ready=0
           for i in $(seq 1 30); do
-            if curl -fs http://localhost:8000/health > /dev/null; then break; fi
+            if curl -fsS http://127.0.0.1:8000/health > /dev/null 2>&1; then
+              ready=1
+              break
+            fi
             sleep 2
           done
+
+          if [ "$ready" -ne 1 ]; then
+            echo "::error::Container did not serve /health within 60s"
+            echo "----- podman ps -a -----";       podman ps -a
+            echo "----- podman port -----";        podman port ci-verify || true
+            echo "----- container logs -----";     podman logs ci-verify || true
+            echo "----- curl verbose -----";       curl -v http://127.0.0.1:8000/health || true
+            podman rm -f ci-verify || true
+            exit 1
+          fi
+
           python scripts/smoke_test.py
+          status=$?
+          if [ $status -ne 0 ]; then
+            echo "----- container logs -----"; podman logs ci-verify || true
+          fi
           podman rm -f ci-verify
+          exit $status
 
       # GITHUB_TOKEN is injected automatically; --password-stdin keeps it out
       # of the process list and the log.
